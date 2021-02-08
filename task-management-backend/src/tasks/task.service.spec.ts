@@ -4,12 +4,15 @@ import { TaskRepository } from './task.repository';
 import { User } from '../auth/user.entity';
 import { GetTaskFilterDto } from './dto/get-tasks-filter.dto';
 import { TaskStatus } from './task-status.enum';
+import { NotFoundException } from '@nestjs/common';
 
 const mockUser = { id: 12, username: 'testUser' };
 
 const mockTaskRepository = () => ({
   getTasks: jest.fn(),
   findOne: jest.fn(),
+  createTask: jest.fn(),
+  delete: jest.fn(),
 });
 
 describe('TaskService', () => {
@@ -66,7 +69,67 @@ describe('TaskService', () => {
     it('throws an error as task is not found', () => {
       taskRepository.findOne.mockResolvedValue(null);
 
-      expect(tasksService.getTaskById(1, mockUser)).rejects.toThrow();
+      expect(tasksService.getTaskById(1, mockUser)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('createTask', () => {
+    it('create an new task', async () => {
+      taskRepository.createTask.mockResolvedValue('some task');
+
+      expect(taskRepository.createTask).not.toHaveBeenCalled();
+      const mockTask = { title: 'Test title', description: 'Test desc' };
+      const result = await tasksService.createTask(mockTask, mockUser);
+      expect(taskRepository.createTask).toHaveBeenCalledWith(
+        mockTask,
+        mockUser,
+      );
+
+      expect(result).toEqual('some task');
+    });
+  });
+
+  describe('deleteTask', () => {
+    it('calls taskRepository .deleteTask() to delete a task', async () => {
+      taskRepository.delete.mockResolvedValue({ affected: 1 });
+
+      expect(taskRepository.delete).not.toHaveBeenCalled();
+
+      await tasksService.deleteTask(1, mockUser);
+
+      expect(taskRepository.delete).toHaveBeenCalledWith({
+        id: 1,
+        userId: mockUser.id,
+      });
+    });
+
+    it('throws an error as task could not been found', () => {
+      taskRepository.delete.mockResolvedValue({ affected: 0 });
+      expect(tasksService.deleteTask(1, mockUser)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    describe('updateTaskStatus', () => {
+      it('updates a task status', async () => {
+        const save = jest.fn().mockResolvedValue(true);
+        tasksService.getTaskById = jest.fn().mockResolvedValue({
+          status: TaskStatus.OPEN,
+          save,
+        });
+        expect(tasksService.getTaskById).not.toHaveBeenCalled();
+
+        const result = await tasksService.updateTaskStatus(
+          1,
+          TaskStatus.OPEN,
+          mockUser,
+        );
+        expect(tasksService.getTaskById).toHaveBeenCalled();
+        expect(save).toHaveBeenCalled();
+        expect(result.status).toEqual(TaskStatus.OPEN);
+      });
     });
   });
 });
